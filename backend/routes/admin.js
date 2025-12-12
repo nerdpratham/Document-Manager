@@ -2,15 +2,30 @@ const express = require('express')
 const jwt = require('jsonwebtoken');
 const authmiddleware = require('../middleware/authmiddleware');
 const router = express.Router();
+const multer = require('multer');
+const { uploadPDFFromBuffer } = require('../cloudinary');
 
 const app = express();
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-router.post('/create-notice' , authmiddleware , async(req , res) => {
+// Multer setup for PDF uploads (max 5MB, PDFs only)
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype !== 'application/pdf') {
+            return cb(new Error('Only PDF files are allowed'));
+        }
+        cb(null, true);
+    },
+});
+
+router.post('/create-notice' , authmiddleware , upload.single('pdf'), async(req , res) => {
     try{
         const { title , content } = req.body;
+        const file = req.file;
 
         const userid = req.userid;
 
@@ -18,14 +33,28 @@ router.post('/create-notice' , authmiddleware , async(req , res) => {
             where : {id : userid}
         })
 
-        if(user.role != "ADMIN"){
+        if(!user || user.role != "ADMIN"){
             return res.status(404).json({ error: 'unauthorised'});
+        }
+
+        let pdfUrl = null;
+        let pdfPublicId = null;
+
+        if (file) {
+            const uploadResult = await uploadPDFFromBuffer(file.buffer, {
+                folder: 'notices',
+                public_id: `notice-${Date.now()}`
+            });
+            pdfUrl = uploadResult.secure_url;
+            pdfPublicId = uploadResult.public_id;
         }
 
         const newNotice = await prisma.notice.create({
             data: {
                 title,
                 content,
+                pdfUrl,
+                pdfPublicId,
                 userId : userid
             },
         })
@@ -36,10 +65,14 @@ router.post('/create-notice' , authmiddleware , async(req , res) => {
                 id: newNotice.id,
                 title: newNotice.title,
                 content: newNotice.content,
+                pdfUrl: newNotice.pdfUrl,
             }   
         });
 
     }catch(error){
+        if (error.message === 'Only PDF files are allowed' || error.message.includes('File too large')) {
+            return res.status(400).json({ error: error.message });
+        }
         res.status(500).json({ error: error.message });
     }
 })

@@ -27,6 +27,7 @@ function AdminDashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [successMessageNotice, setSuccessMessageNotice] = useState("");
     const [successMessageMod, setSuccessMessageMod] = useState("");
+    const [pdfFile, setPdfFile] = useState(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -109,6 +110,41 @@ function AdminDashboard() {
 
   const handleCloseOverlay = () => {
     setIsOverlayVisible(false);
+    setPdfFile(null); // Reset PDF file when closing overlay
+    setTitle('Enter title');
+    setBody('About');
+    setError({});
+  };
+
+  const handlePdfChange = (e) => {
+    const file = e.target.files[0];
+    
+    if (!file) {
+      setPdfFile(null);
+      setError({ ...Error, pdf: '' });
+      return;
+    }
+
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      setError({ ...Error, pdf: 'Please upload a PDF file only' });
+      setPdfFile(null);
+      e.target.value = ''; // Clear the input
+      return;
+    }
+
+    // Validate file size (5MB = 5 * 1024 * 1024 bytes)
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (file.size > maxSize) {
+      setError({ ...Error, pdf: 'File size must be less than 5MB' });
+      setPdfFile(null);
+      e.target.value = ''; // Clear the input
+      return;
+    }
+
+    // File is valid
+    setPdfFile(file);
+    setError({ ...Error, pdf: '' });
   };
 //------------------------------------------------------------------------------
   const handleSubmitRoles = async (e) => {
@@ -172,12 +208,21 @@ function AdminDashboard() {
     try{
         const token = localStorage.getItem("token");
 
-        const response = await axios.post("https://rbac-app-9epa.onrender.com/api/v1/admin/create-notice", {
-            title : title,
-            content : body
-        },{
-            headers: { Authorization: `Bearer ${token}` }
-        })
+        const formData = new FormData();
+        formData.append('title', title);
+        formData.append('content', body);
+        if (pdfFile) {
+          formData.append('pdf', pdfFile);
+        }
+
+        const response = await axios.post("https://rbac-app-9epa.onrender.com/api/v1/admin/create-notice",
+          formData,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data',
+            }
+          })
 
         if(response.status == 201){
             setSuccessMessageNotice("Success")
@@ -284,6 +329,28 @@ function AdminDashboard() {
                 />
                 {Error.body && <p className="italic text-red-500 text-xs">{Error.body}</p>}
 
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">PDF Document (Optional)</label>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handlePdfChange}
+                  className="mt-1 block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-md file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100
+                    border border-gray-300 rounded-md px-3 py-2"
+                />
+                {pdfFile && (
+                  <p className="mt-2 text-sm text-gray-600">
+                    Selected: {pdfFile.name} ({(pdfFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </p>
+                )}
+                {Error.pdf && <p className="italic text-red-500 text-xs mt-1">{Error.pdf}</p>}
+                <p className="mt-1 text-xs text-gray-500">Maximum file size: 5MB</p>
               </div>
               <button
                 onClick={handleSubmit}

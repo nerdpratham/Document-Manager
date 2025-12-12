@@ -35,6 +35,8 @@ model Notice {
   createdAt   DateTime @default(now())
   title     String
   content   String
+  pdfUrl    String?
+  pdfPublicId String?
   userId    String
   user      User @relation(fields: [userId] , references: [id])
 

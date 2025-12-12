@@ -15,6 +15,16 @@ const NoticesList = ({ notices }) => {
               <h2 className="text-xl font-semibold text-gray-800">{notice.title}</h2>
               <p className="text-sm text-gray-600">{new Date(notice.createdAt).toLocaleString()}</p>
               <p className="text-gray-700 mt-2">{notice.content}</p>
+              {notice.pdfUrl && (
+                <a
+                  href={notice.pdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-block text-blue-600 hover:underline text-sm font-semibold"
+                >
+                  View attached PDF
+                </a>
+              )}
             </div>
           ))}
         </div>
