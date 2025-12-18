@@ -19,6 +19,12 @@ router.use('/admin' , adminRouter)
 
 const verificationCodes = new Map();
 
+// Validate email configuration
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.error('⚠️  WARNING: EMAIL_USER or EMAIL_PASS environment variables are not set!');
+    console.error('Email OTP functionality will not work without these variables.');
+}
+
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -26,6 +32,17 @@ const transporter = nodemailer.createTransport({
       pass: process.env.EMAIL_PASS
     }
   });
+
+// Verify transporter configuration
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error('❌ Email transporter verification failed:', error.message);
+        console.error('Please check your EMAIL_USER and EMAIL_PASS in .env file');
+        console.error('For Gmail, make sure you are using an App Password, not your regular password');
+    } else {
+        console.log('✅ Email transporter is ready to send emails');
+    }
+});
 
 // -- requires - username , password
 router.post('/login' , async(req , res) => {
@@ -114,9 +131,33 @@ router.post('/signup' , async(req , res) => {
 
 router.post('/send-verification-email', async (req, res) => {
     try{
-        const { email }  = req.body
+
+        console.log("Sending verification email to: ", req.body.email);
+        // Check if email configuration is set
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.error('Email configuration missing: EMAIL_USER or EMAIL_PASS not set');
+            return res.status(500).json({ 
+                error: 'Email service is not configured. Please contact administrator.',
+                message: 'Email service is not configured. Please contact administrator.'
+            });
+        }
+
+        const { email }  = req.body;
+        
+        // Validate email format
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Invalid email format' });
+        }
+
         const verificationCode = crypto.randomInt(1000, 9999);
         verificationCodes.set(email, verificationCode);
+
+        console.log(`Attempting to send verification email to: ${email}`);
 
         await transporter.sendMail({
             from: process.env.EMAIL_USER,
@@ -125,10 +166,27 @@ router.post('/send-verification-email', async (req, res) => {
             text: `Your verification code is: ${verificationCode}`,
         });
 
+        console.log(`✅ Verification email sent successfully to: ${email}`);
         res.status(200).json({ message: 'Verification email sent successfully' });
 
     }catch(error){
-        res.status(500).json({ error: error.message });
+        console.error('❌ Error sending verification email:', error);
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to send verification email';
+        
+        if (error.code === 'EAUTH') {
+            errorMessage = 'Email authentication failed. Please check EMAIL_USER and EMAIL_PASS in server configuration.';
+        } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+            errorMessage = 'Could not connect to email server. Please try again later.';
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        res.status(500).json({ 
+            error: errorMessage,
+            message: errorMessage
+        });
     }
 })
 
