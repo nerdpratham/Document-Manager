@@ -2,7 +2,10 @@ const express = require("express")
 const app = express();
 const rootRouter = require('./routes/index')
 const cors = require('cors')
-require('dotenv').config();
+
+// Load environment variables from .env and override any existing ones (like system env)
+require('dotenv').config({ override: true });
+console.log('Using DATABASE_URL:', process.env.DATABASE_URL);
 
 app.use(cors({
     origin: "http://localhost:5173",
